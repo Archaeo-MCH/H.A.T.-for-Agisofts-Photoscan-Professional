@@ -1,0 +1,233 @@
+# Compatibility - PhotoScan Professional 1.1.6
+# exports orthophoto in planar projection defined by vector (from three markers) and Z axes.
+# script version 0.9
+# written by Alexey Pasumansky, AgiSoft LLC 
+# expanded by Marcel C. Hagner for LAD@RPS 2015
+import os
+import PhotoScan
+from PySide import QtCore, QtGui
+
+def getMarker(chunk, label):
+	
+	for marker in chunk.markers:
+		if marker.label.upper() == label.upper():
+			return marker
+	return 0
+
+def vect(a, b):
+	
+	result = PhotoScan.Vector([a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y *b.x])
+	return result.normalized()
+
+class ExportDlg(QtGui.QDialog):
+
+	def __init__ (self, parent):
+		QtGui.QDialog.__init__(self, parent)
+		
+		chunk = doc.chunk
+		self.supported_types = ["jpg", "tif", "png"]
+		self.blending = PhotoScan.AverageBlending
+		
+		
+		self.setWindowTitle("OPEX")
+		
+		self.btnQuit = QtGui.QPushButton("&Exit")
+		self.btnQuit.setFixedSize(150,50)
+		
+		self.btnP1 = QtGui.QPushButton("&Export")
+		self.btnP1.setFixedSize(150,50)
+		
+		self.resTxt = QtGui.QLabel()
+		self.resTxt.setText("Export resolution (m):")
+		self.resTxt.setFixedSize(150, 25)	
+		
+		self.vectTxt = QtGui.QLabel()
+		self.vectTxt.setText("Horizontal vector:")
+		self.vectTxt.setFixedSize(150, 25)		
+
+		self.Btn_cc = QtGui.QCheckBox("Color Correction")
+		self.Btn_cc.setChecked(True)
+		
+		self.vect2Txt = QtGui.QLabel()
+		self.vect2Txt.setText("Vertical vector:")
+		self.vect2Txt.setFixedSize(150, 25)			
+		
+		self.resEdt = QtGui.QLineEdit()
+		self.resEdt.setPlaceholderText("type in export resolution, e.g 0.01")
+		self.resEdt.setFixedSize(150, 25)
+				
+		self.radioBtn_v = QtGui.QRadioButton("Vertical")
+		self.radioBtn_h = QtGui.QRadioButton("Horizontal")
+		self.radioBtn_v.setChecked(True)
+		self.radioBtn_h.setChecked(False)		
+		
+		self.llistV = [None, None]
+		
+		self.llistV[0] = QtGui.QComboBox()
+		self.llistV[0].resize(150, 30)
+		self.llistV[1] = QtGui.QComboBox()
+		self.llistV[1].resize(150, 30)	
+		
+		self.llistH = [None, None]
+		
+		self.llistH[0] = QtGui.QComboBox()
+		self.llistH[0].resize(150, 30)
+		self.llistH[1] = QtGui.QComboBox()
+		self.llistH[1].resize(150, 30)	
+
+		
+		self.radio = QtGui.QVBoxLayout()
+		self.radio.addWidget(self.radioBtn_v)
+		self.radio.addWidget(self.radioBtn_h)	
+		
+		for marker in chunk.markers:
+			for ilist in self.llistV:
+				ilist.addItem(marker.label)	
+			for ilist in self.llistH:
+				ilist.addItem(marker.label)	
+
+		
+		layout = QtGui.QGridLayout()   #creating layout
+		layout.setSpacing(10)	
+		layout.addWidget(self.resTxt, 0, 0)
+		layout.addWidget(self.resEdt, 0, 1)
+
+		layout.addWidget(self.vectTxt, 1, 0)		
+		layout.addWidget(self.vect2Txt, 2, 0)	
+		layout.addWidget(self.llistH[0], 1, 1)
+		layout.addWidget(self.llistH[1], 1, 2)
+		layout.addWidget(self.llistV[0], 2, 1)
+		layout.addWidget(self.llistV[1], 2, 2)
+		layout.addWidget(self.Btn_cc, 0, 2)
+		layout.addLayout(self.radio, 3, 0)
+
+		layout.addWidget(self.btnP1, 3, 1)
+		layout.addWidget(self.btnQuit, 3, 2)
+		self.setLayout(layout)  
+		
+		proc_export = lambda : self.procExport()
+		
+		QtCore.QObject.connect(self.btnP1, QtCore.SIGNAL("clicked()"), proc_export)
+		QtCore.QObject.connect(self.btnQuit, QtCore.SIGNAL("clicked()"), self, QtCore.SLOT("reject()"))	
+
+		self.exec()
+
+	def procExport(self):
+	
+		chunk = doc.chunk
+	
+		path = PhotoScan.app.getExistingDirectory("Bitte wählen Sie den Ordner mit den gesammelten Geo-Cut-Modell aus")
+		filelist = os.listdir(path)
+		doclist = list()
+		for file in filelist:
+			if file[-3:].upper() == "PSZ":
+				doclist.append(path + "\\" + file)
+		
+	
+		try:
+			d_x = d_y = float(self.resEdt.text())
+		except(ValueError):
+			PhotoScan.app.messageBox("Incorrect export resolution! Please use point delimiter.\n")
+			print("Script aborted.")
+			return 0
+
+		if self.llistV[0].currentIndex() == self.llistV[1].currentIndex():
+			PhotoScan.app.messageBox("Can't use the same marker for vector start and end.\n")
+			print("Script aborted.")
+			return 0
+
+		if self.llistH[0].currentIndex() == self.llistH[1].currentIndex():
+			PhotoScan.app.messageBox("Can't use the same marker for vector start and end.\n")
+			print("Script aborted.")
+			return 0
+			
+		if len(chunk.markers) < 2:
+			PhotoScan.app.messageBox("No markers.\n")
+			print("Script aborted.")
+			return 0
+
+		print("Skript startet...")	
+			
+		type = "tif"
+		for doc_path in doclist:
+			doc.open(doc_path)
+			chunk = doc.chunk
+			T = chunk.transform.matrix
+			
+			path = doc_path[:-3] + type
+			
+
+			self.btnP1.setDisabled(True)
+			self.btnQuit.setDisabled(True)		
+			
+			m1 = getMarker(chunk, self.llistH[0].currentText())
+			m2 = getMarker(chunk, self.llistH[1].currentText())
+			
+			horizontal = m2.position - m1.position
+			horizontal = T.mulv(horizontal)
+			
+			m1 = getMarker(chunk, self.llistV[0].currentText())
+			m2 = getMarker(chunk, self.llistV[1].currentText())
+
+			vertical = m2.position - m1.position
+			vertical = T.mulv(vertical)
+
+			normal = vect(vertical, horizontal)
+			
+			if self.radioBtn_h.isChecked():
+				vertical = vect(horizontal, normal)
+				horizontal = horizontal.normalized()		
+				
+			elif self.radioBtn_v.isChecked():
+				horizontal = -vect(vertical, normal)
+				#horizontal, vertical = -vertical, -horizontal
+				
+			else:
+				PhotoScan.app.messageBox("Fehler!Kann das OF nicht exportieren" + path)
+				print("Skript wird abgebrochen.")
+				continue
+		
+			R = PhotoScan.Matrix ([horizontal, vertical, -normal])
+			origin = T.mulp(chunk.markers [4].position)
+			A = m1.reference.location * PhotoScan.Vector([0,0,1]) #A ist der Höhenwert von m1
+			X = (-1) * R * origin
+			
+			horizontal.size = 4
+			horizontal.w = X.x
+			vertical.size = 4
+			vertical.w = X.y + A # hier wird A hinzuaddiert
+			normal.size = 4
+			normal.w = -X.z
+			
+			proj = PhotoScan.Matrix ([horizontal, vertical, -normal, PhotoScan.Vector([0,0,0,1])]) 		
+			
+			if self.Btn_cc.isChecked():
+				color_correction = color_correction=(True)
+				
+			elif not self.Btn_cc.isChecked():
+				color_correction = color_correction=(False)
+				
+			chunk.exportOrthophoto(path, type, self.blending,color_correction, projection = proj, dx = d_x, dy = d_y)
+
+			self.btnP1.setDisabled(False)
+			self.btnQuit.setDisabled(False)
+			PhotoScan.app.update()
+			print("Orthofoto wird exportiert nach to:\n" + path)
+		
+		print("Skript rum.Viele Grüße MP")
+		print()
+		return 1
+
+
+
+def main():
+
+	global doc
+	doc = PhotoScan.app.document
+
+	app = QtGui.QApplication.instance()
+	parent = app.activeWindow()
+	
+	dlg = ExportDlg(parent)
+
+PhotoScan.app.addMenuItem("HagnerArchaeoTools/OPEX", main)	
