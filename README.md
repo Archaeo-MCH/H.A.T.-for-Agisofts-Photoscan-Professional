@@ -13,7 +13,7 @@ http://www.agisoft.com/forum/index.php?topic=3996.0
 I have changed a few things for my purpose.
 
 Server-Script:
-The origin of the server script code is from John Sietsma (https://github.com/johnsietsma/)
+The origin of the server script code is from John Sietsma (https://github.com/johnsietsma/) and I use it with his permission.
 !!! https://github.com/johnsietsma/PhotoscanWorkflow/blob/master/workflow.py !!!
 I have changed a few things for my purpose.
 
